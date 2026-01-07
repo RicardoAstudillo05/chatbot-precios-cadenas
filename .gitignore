@@ -1,0 +1,66 @@
+# ============================================
+# ARCHIVOS SENSIBLES - NO SUBIR
+# ============================================
+.env.local
+.env.production
+
+# ============================================
+# ARCHIVOS TEMPORALES Y DESCARGAS
+# ============================================
+descargas/
+*.xls
+*.xlsx
+*.csv
+*.log
+
+# ============================================
+# PYTHON
+# ============================================
+# Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Entorno virtual
+venv/
+env/
+ENV/
+.venv
+
+# ============================================
+# SISTEMA OPERATIVO
+# ============================================
+# Windows
+Thumbs.db
+desktop.ini
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+
+# ============================================
+# IDEs
+# ============================================
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# ============================================
+# OTROS
+# ============================================
+*.bak
+*.tmp
+*.swp
