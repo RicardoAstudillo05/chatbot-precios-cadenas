@@ -35,7 +35,7 @@ def ejecutar_sp():
     )
     
     cursor = conn.cursor()
-    cursor.execute("select IDCategoria, cat_abreviatura,cat_descripcion from Categoria where cdn_id = 10 and IDStatus = '71039503-85CF-E511-80C6-000D3A3261F3'")
+    cursor.execute("select IDCategoria, cat_abreviatura,cat_descripcion from Categoria where cdn_id = 2 and IDStatus = '71039503-85CF-E511-80C6-000D3A3261F3'")
     
     # Saltar mensajes de error
     while cursor.description is None:
