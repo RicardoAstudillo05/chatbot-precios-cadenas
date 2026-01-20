@@ -1,15 +1,14 @@
 <<<<<<< HEAD
-# 🤖 Chatbot de Telegram - Sistema de Consulta de Precios
+# Chatbot de Telegram - Sistema de Consulta de Precios
 
 Bot automatizado para consulta y descarga de listas de precios de cadenas de restaurantes. Los usuarios pueden solicitar archivos Excel con precios generales (todas las sucursales) de manera rápida y automática a través de Telegram.
 
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/)
 [![Telegram Bot API](https://img.shields.io/badge/Telegram%20Bot%20API-20.7-blue.svg)](https://python-telegram-bot.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-
 ---
 
-## 📋 Tabla de Contenidos
+## Tabla de Contenidos
 
 - [Características](#-características)
 - [Estructura del Proyecto](#-estructura-del-proyecto)
@@ -24,58 +23,58 @@ Bot automatizado para consulta y descarga de listas de precios de cadenas de res
 
 ---
 
-## ✨ Características
+## Características
 
-- 🤖 **Bot de Telegram interactivo** con menús de botones
-- 📊 **Generación automática** de archivos Excel (.xlsx)
-- 🏪 **16 cadenas de restaurantes** configuradas
-- 📍 **Precios generales** (incluye todas las sucursales)
-- ⚡ **Respuesta instantánea** a solicitudes
-- 🔐 **Sistema de autenticación** automática
-- 📝 **Logging completo** de operaciones
-- 🔄 **Navegación intuitiva** con opciones de volver/cancelar
-- 🌐 **Selenium WebDriver** para automatización web
-- 💾 **Gestión automática** de archivos temporales
+-  **Bot de Telegram interactivo** con menús de botones
+-  **Generación automática** de archivos Excel (.xlsx)
+-  **16 cadenas de restaurantes** configuradas
+-  **Precios generales** (incluye todas las sucursales)
+-  **Respuesta instantánea** a solicitudes
+-  **Sistema de autenticación** automática
+-  **Logging completo** de operaciones
+-  **Navegación intuitiva** con opciones de volver/cancelar
+-  **Selenium WebDriver** para automatización web
+-  **Gestión automática** de archivos temporales
 
 ---
 
-## 📁 Estructura del Proyecto
+##  Estructura del Proyecto
 
 ```
 chatbot-precios-cadenas/
 │
-├── 📄 bot.py                      # Script principal del bot de Telegram
+├──  bot.py                      # Script principal del bot de Telegram
 │   └── Maneja la interacción con usuarios, menús y envío de archivos
 │
-├── 🔧 sistema_precios.py          # Módulo de automatización web
+├──  sistema_precios.py          # Módulo de automatización web
 │   ├── SistemaPrecios            → Conexión real con Selenium
 │   └── SistemaPreciosSimulado    → Sistema de pruebas (sin VPN)
 │
-├── ⚙️ config.py                   # Configuración centralizada
+├──  config.py                   # Configuración centralizada
 │   ├── Variables de entorno
 │   ├── Lista de cadenas
 │   └── Validaciones
 │
-├── 📦 requirements.txt            # Dependencias del proyecto
+├──  requirements.txt            # Dependencias del proyecto
 │   └── Librerías Python necesarias
 │
-├── 🔒 .env                        # Variables de entorno (NO SUBIR A GIT)
+├──  .env                        # Variables de entorno (NO SUBIR A GIT)
 │   ├── Token del bot
 │   ├── Credenciales del sistema
 │   └── Configuraciones
 │
-├── 📂 descargas/                  # Archivos temporales (se crea automáticamente)
+├──  descargas/                  # Archivos temporales (se crea automáticamente)
 │   └── Archivos Excel generados
 │
-├── 📂 venv/                       # Entorno virtual de Python
+├──  venv/                       # Entorno virtual de Python
 │   └── Dependencias aisladas
 │
-└── 📖 README.md                   # Este archivo
+└──  README.md                   # Este archivo
 ```
 
 ---
 
-## 🔧 Requisitos Previos
+##  Requisitos Previos
 
 Antes de comenzar, asegúrate de tener instalado:
 
@@ -95,7 +94,7 @@ Antes de comenzar, asegúrate de tener instalado:
 
 ---
 
-## 🚀 Instalación
+##  Instalación
 
 ### Paso 1: Clonar el Repositorio
 
@@ -145,7 +144,7 @@ python -c "import selenium; print('✅ Selenium')"
 
 ---
 
-## ⚙️ Configuración
+##  Configuración
 
 ### 1. Crear Token del Bot
 
@@ -206,7 +205,7 @@ CADENAS = [
 
 ---
 
-## 🎯 Uso
+##  Uso
 
 ### Iniciar el Bot
 
@@ -260,9 +259,9 @@ INFO - ⌨️  Presiona Ctrl+C para detener el bot
 
 ---
 
-## 🧪 Modo Prueba vs Modo Producción
+##  Modo Prueba vs Modo Producción
 
-### 🟢 MODO PRUEBA (Sin VPN - Recomendado para testing)
+###  MODO PRUEBA (Sin VPN - Recomendado para testing)
 
 Usa datos simulados sin conectar al sistema real.
 
@@ -289,7 +288,7 @@ python bot.py
 
 ---
 
-### 🔴 MODO PRODUCCIÓN (Con Sistema Real)
+###  MODO PRODUCCIÓN (Con Sistema Real)
 
 Conecta al sistema real usando Selenium.
 
@@ -455,7 +454,7 @@ INFO - ✅ Cadena seleccionada: JUAN VALDEZ
 
 ---
 
-## 🎨 Personalización
+##  Personalización
 
 ### Agregar Nuevas Cadenas
 
@@ -488,7 +487,7 @@ USUARIOS_AUTORIZADOS=123456789,987654321,555555555
 
 ---
 
-## 🐛 Solución de Problemas
+##  Solución de Problemas
 
 ### Problema: "ModuleNotFoundError: No module named 'telegram'"
 
@@ -547,7 +546,7 @@ El driver se descarga automáticamente en el primer uso.
 
 ---
 
-## 📊 Logs y Debugging
+##  Logs y Debugging
 
 ### Ver Logs en Tiempo Real
 
@@ -575,9 +574,9 @@ LOG_LEVEL=WARNING  # Solo advertencias y errores
 
 ---
 
-## 🔒 Seguridad
+##  Seguridad
 
-### ⚠️ IMPORTANTE - Nunca Subir a Git:
+###  IMPORTANTE - Nunca Subir a Git:
 
 - ❌ `.env` - Contiene credenciales
 - ❌ `descargas/` - Puede contener información sensible
@@ -606,7 +605,7 @@ venv/
 
 ---
 
-## 🤝 Contribución
+##  Contribución
 
 ### Para el Equipo de Trabajo
 
@@ -648,7 +647,7 @@ Si encuentras un bug o tienes una sugerencia:
 
 ---
 
-## 📞 Soporte
+##  Soporte
 
 ### Contacto
 
@@ -665,7 +664,7 @@ Si encuentras un bug o tienes una sugerencia:
 
 ---
 
-## 📝 Notas Finales
+##  Notas Finales
 
 ### Checklist para Producción
 
@@ -690,7 +689,7 @@ Si encuentras un bug o tienes una sugerencia:
 
 ---
 
-## 📄 Licencia
+##  Licencia
 
 Este proyecto es de uso interno para la empresa. Todos los derechos reservados.
 
