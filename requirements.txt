@@ -1,6 +1,18 @@
+# Bot de Telegram
 python-telegram-bot==20.7
+
+# Base de datos SQL Server
+pyodbc==5.0.1
+
+# Procesamiento de datos y Excel
 pandas==2.1.4
 openpyxl==3.1.2
+
+# Seguridad - Encriptación de credenciales
+cryptography==41.0.7
+
+# Variables de entorno
 python-dotenv==1.0.0
-selenium==4.15.2
-webdriver-manager==4.0.1
+
+# Utilidades
+typing-extensions==4.9.0
