@@ -1,430 +1,436 @@
 import os
 import logging
-from datetime import datetime
+from typing import Optional
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
     CallbackQueryHandler,
-    ContextTypes
+    ContextTypes,
+    ConversationHandler,
+    MessageHandler,
+    filters
 )
+from cadenas_config import CADENAS_LISTA, obtener_cdn_id, validar_cadena
+from db_consultas import ConsultasDB
+from credenciales_manager import obtener_credenciales_manager
 
-# Configuración de logging
+# Cargar variables de entorno desde .env
+from dotenv import load_dotenv
+load_dotenv()
+
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# TOKEN de tu bot
-TOKEN = "8541513790:AAFYFNeWnDWx8sWtMKZy_iw_F9Pj1zIZSXI"
+SELECCIONANDO_CADENA = 1
 
-# Listado de cadenas
-CADENAS = [
-    "AMERICAN DELI PATIOS", "EL ESPAÑOL", "JUAN VALDEZ",
-    "BASKIN ROBBINS 1", "EMBUTSER", "KENTUCKY FRENCH CHICKEN",
-    "CAFE ASTORIA", "FEDERER", "MENESTRAS DEL NEGRO", "CAJUN",
-    "GUS", "CASA RES", "HELADERIAS KFC", "TROPI BURGUER",
-    "EL CAPPO", "EL CAPPO II", "CINNABON", "DOLCE INCONTRO"
-]
-
-
-# Simulación del sistema de precios
-# En producción, aquí integrarías tu clase SistemaPrecios
-class SistemaPreciosSimulado:
-    """Clase temporal para simular la generación de archivos"""
-    
-    def __init__(self):
-        self.download_dir = "descargas"
-        os.makedirs(self.download_dir, exist_ok=True)
-    
-    def obtener_precios(self, cadena):
-        """
-        Simula la descarga de un archivo XLS
-        En producción, aquí llamarías al sistema real
-        """
-        try:
-            logger.info(f"Generando archivo para {cadena} - GENERAL (todas las sucursales)")
-            
-            # Crear un archivo XLS simulado con pandas
-            import pandas as pd
-            
-            # Datos de ejemplo
-            datos = {
-                'Producto': ['Producto A', 'Producto B', 'Producto C', 'Producto D', 'Producto E'],
-                'Precio': [10.50, 25.00, 15.75, 8.99, 12.50],
-                'Stock': [100, 50, 75, 200, 150],
-                'Categoría': ['Bebidas', 'Comida', 'Postres', 'Bebidas', 'Comida'],
-                'Sucursal': ['Todas', 'Todas', 'Todas', 'Todas', 'Todas']
-            }
-            
-            df = pd.DataFrame(datos)
-            
-            # Nombre del archivo
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            nombre_archivo = f"Precios_General_{cadena.replace(' ', '_')}_{timestamp}.xlsx"
-            ruta_archivo = os.path.join(self.download_dir, nombre_archivo)
-            
-            # Guardar archivo con formato mejorado
-            with pd.ExcelWriter(ruta_archivo, engine='openpyxl') as writer:
-                df.to_excel(writer, index=False, sheet_name='Precios')
-                
-                # Ajustar ancho de columnas
-                worksheet = writer.sheets['Precios']
-                for column in worksheet.columns:
-                    max_length = 0
-                    column_letter = column[0].column_letter
-                    for cell in column:
-                        try:
-                            if len(str(cell.value)) > max_length:
-                                max_length = len(cell.value)
-                        except:
-                            pass
-                    adjusted_width = min(max_length + 2, 50)
-                    worksheet.column_dimensions[column_letter].width = adjusted_width
-            
-            logger.info(f"Archivo generado: {ruta_archivo}")
-            return ruta_archivo
-            
-        except Exception as e:
-            logger.error(f"Error al generar archivo: {e}")
-            return None
-
-
-# Instancia del sistema
-sistema = SistemaPreciosSimulado()
-
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Función inicial /start"""
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user = update.effective_user
-    logger.info(f"Usuario {user.first_name} ({user.id}) inició conversación")
+    logger.info(f"Usuario {user.id} ({user.username}) inicio el bot")
     
-    # Limpiar estado anterior
-    context.user_data.clear()
-    
-    # Crear teclado inline
-    keyboard = [
-        [InlineKeyboardButton("✅ Continuar", callback_data="CONTINUAR")],
-        [InlineKeyboardButton("❌ Cancelar", callback_data="CANCELAR")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(
-        f"👋 ¡Hola, {user.first_name}!\n\n"
-        "Bienvenido al *Sistema de Consulta de Precios* 📊\n\n"
-        "Este bot te ayudará a obtener las listas de precios generales "
-        "de nuestras cadenas de manera rápida y automática.\n\n"
-        "Los archivos incluyen todas las sucursales.\n\n"
-        "¿Deseas continuar?",
-        reply_markup=reply_markup,
-        parse_mode='Markdown'
+    mensaje_inicio = (
+        f"Hola {user.first_name}\n\n"
+        f"Bienvenido al Sistema Automático de Consulta de Precios\n\n"
+        f"Puedo generar reportes de precios en formato Excel para cualquiera "
+        f"de nuestras {len(CADENAS_LISTA)} cadenas.\n\n"
+        f"El proceso incluye:\n"
+        f"- Consulta automática de categorías\n"
+        f"- Obtención de precios actualizados\n"
+        f"- Generación de archivo Excel\n\n"
+        f"Por favor, selecciona la cadena que deseas consultar:"
     )
+    
+    if update.callback_query:
+        await update.callback_query.message.reply_text(mensaje_inicio)
+    else:
+        await update.message.reply_text(mensaje_inicio)
+    
+    return await mostrar_menu_cadenas(update, context)
 
-
-async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Maneja todas las interacciones con botones"""
-    query = update.callback_query
-    user = query.from_user
-    await query.answer()  # Importante: responde al callback
-    
-    logger.info(f"Usuario {user.first_name} presionó: {query.data}")
-    
-    # ==================== CANCELAR ====================
-    if query.data == "CANCELAR":
-        await query.edit_message_text(
-            "❌ Proceso cancelado.\n\n"
-            "Si deseas consultar precios nuevamente, usa el comando /start"
-        )
-        context.user_data.clear()
-        return
-    
-    # ==================== CONTINUAR INICIAL ====================
-    if query.data == "CONTINUAR" and not context.user_data.get("cadena"):
-        await mostrar_menu_cadenas(query, context)
-        return
-    
-    # ==================== SELECCIÓN DE CADENA ====================
-    if query.data.startswith("CADENA_"):
-        await seleccionar_cadena(query, context)
-        return
-    
-    # ==================== VOLVER A CADENAS ====================
-    if query.data == "VOLVER_CADENAS":
-        context.user_data.pop("cadena", None)
-        await mostrar_menu_cadenas(query, context)
-        return
-    
-    # ==================== CONFIRMAR Y GENERAR ====================
-    if query.data == "CONFIRMAR_GENERAR":
-        await generar_y_enviar_archivo(query, context)
-        return
-
-
-async def mostrar_menu_cadenas(query, context):
-    """Muestra el menú de cadenas disponibles"""
-    # Crear botones en filas de 2 columnas para mejor visualización
+async def mostrar_menu_cadenas(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     keyboard = []
-    for i in range(0, len(CADENAS), 2):
+    for i in range(0, len(CADENAS_LISTA), 2):
         fila = []
-        # Primera cadena de la fila
-        fila.append(InlineKeyboardButton(
-            f"{i+1}. {CADENAS[i][:20]}", 
-            callback_data=f"CADENA_{i}"
-        ))
-        # Segunda cadena de la fila (si existe)
-        if i + 1 < len(CADENAS):
-            fila.append(InlineKeyboardButton(
-                f"{i+2}. {CADENAS[i+1][:20]}", 
-                callback_data=f"CADENA_{i+1}"
-            ))
+        cadena1 = CADENAS_LISTA[i]
+        nombre_boton1 = cadena1 if len(cadena1) <= 25 else cadena1[:22] + "..."
+        fila.append(
+            InlineKeyboardButton(
+                f"{i+1}. {nombre_boton1}",
+                callback_data=f"cadena_{cadena1}"
+            )
+        )
+        
+        if i + 1 < len(CADENAS_LISTA):
+            cadena2 = CADENAS_LISTA[i + 1]
+            nombre_boton2 = cadena2 if len(cadena2) <= 25 else cadena2[:22] + "..."
+            fila.append(
+                InlineKeyboardButton(
+                    f"{i+2}. {nombre_boton2}",
+                    callback_data=f"cadena_{cadena2}"
+                )
+            )
         keyboard.append(fila)
     
-    # Botón de cancelar
-    keyboard.append([InlineKeyboardButton("❌ Cancelar", callback_data="CANCELAR")])
-    
+    keyboard.append([InlineKeyboardButton("Cancelar", callback_data="cancelar")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await query.edit_message_text(
-        "🏪 *Selecciona la cadena:*\n\n"
-        "Por favor, elige la cadena para la cual necesitas la lista de precios.\n\n"
-        "📌 _El archivo incluirá precios de todas las sucursales_",
-        reply_markup=reply_markup,
-        parse_mode='Markdown'
+    mensaje = (
+        "SELECCIÓN DE CADENA\n\n"
+        "Elige la cadena para la cual deseas generar el reporte de precios:\n\n"
+        "El proceso puede tomar entre 30 segundos y 2 minutos"
     )
-
-
-async def seleccionar_cadena(query, context):
-    """Procesa la selección de una cadena y muestra confirmación"""
-    index = int(query.data.split("_")[1])
-    cadena_seleccionada = CADENAS[index]
     
-    # Guardar en el contexto del usuario
-    context.user_data["cadena"] = cadena_seleccionada
-    context.user_data["cadena_index"] = index
-    
-    logger.info(f"Usuario {query.from_user.first_name} seleccionó: {cadena_seleccionada}")
-    
-    # Crear teclado de confirmación final
-    keyboard = [
-        [InlineKeyboardButton("✅ Confirmar y Generar", callback_data="CONFIRMAR_GENERAR")],
-        [InlineKeyboardButton("🔄 Cambiar Cadena", callback_data="VOLVER_CADENAS")],
-        [InlineKeyboardButton("❌ Cancelar", callback_data="CANCELAR")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await query.edit_message_text(
-        f"📋 *Resumen de tu solicitud:*\n\n"
-        f"🏪 Cadena: *{cadena_seleccionada}*\n"
-        f"📍 Alcance: *Todas las sucursales*\n\n"
-        f"¿Deseas generar el archivo de precios?",
-        reply_markup=reply_markup,
-        parse_mode='Markdown'
-    )
-
-
-async def generar_y_enviar_archivo(query, context):
-    """Genera y envía el archivo de precios"""
-    cadena = context.user_data.get("cadena")
-    
-    if not cadena:
-        await query.edit_message_text(
-            "❌ Error: No se ha seleccionado una cadena.\n\n"
-            "Por favor, usa /start para comenzar nuevamente."
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            mensaje,
+            reply_markup=reply_markup
         )
-        return
+    else:
+        await update.message.reply_text(
+            mensaje,
+            reply_markup=reply_markup
+        )
     
-    # Mensaje de espera
-    await query.edit_message_text(
-        "⏳ *Generando archivo de precios...*\n\n"
-        f"🏪 Cadena: {cadena}\n"
-        f"📍 Alcance: Todas las sucursales\n\n"
-        "Esto puede tomar unos momentos. Por favor, espera...",
-        parse_mode='Markdown'
+    return SELECCIONANDO_CADENA
+
+async def seleccionar_cadena(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer("Procesando solicitud...")
+    
+    cadena_seleccionada = query.data.replace("cadena_", "")
+    
+    if not validar_cadena(cadena_seleccionada):
+        await query.edit_message_text(
+            "ERROR\n\n"
+            "Cadena no válida. Por favor, intenta de nuevo.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("Volver al menú", callback_data="volver_menu")
+            ]])
+        )
+        return SELECCIONANDO_CADENA
+    
+    cdn_id = obtener_cdn_id(cadena_seleccionada)
+    logger.info(f"Usuario {update.effective_user.id} seleccionó: {cadena_seleccionada} (cdn_id: {cdn_id})")
+    
+    mensaje_inicial = (
+        f"PROCESANDO SOLICITUD\n\n"
+        f"Cadena: {cadena_seleccionada}\n"
+        f"ID: {cdn_id}\n\n"
+        f"Este proceso puede tomar entre 30 segundos y 2 minutos\n\n"
+        f"Iniciando proceso..."
     )
     
+    await query.edit_message_text(mensaje_inicial)
+    
+    archivo_generado = await generar_reporte(query, cadena_seleccionada)
+    
+    if archivo_generado:
+        await enviar_archivo_excel(query, archivo_generado, cadena_seleccionada)
+        return SELECCIONANDO_CADENA
+    else:
+        await query.message.reply_text(
+            "ERROR AL GENERAR REPORTE\n\n"
+            "No se pudo generar el reporte. Posibles causas:\n\n"
+            "- Error de conexión a la base de datos\n"
+            "- No hay datos disponibles para esta cadena\n"
+            "- Problema al ejecutar las consultas\n"
+            "- Timeout en la consulta\n\n"
+            "Por favor, intenta nuevamente o selecciona otra cadena.",
+            reply_markup=InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("Reintentar", callback_data=f"cadena_{cadena_seleccionada}"),
+                    InlineKeyboardButton("Menú", callback_data="volver_menu")
+                ],
+                [InlineKeyboardButton("Cancelar", callback_data="cancelar")]
+            ])
+        )
+        return SELECCIONANDO_CADENA
+
+async def generar_reporte(query, nombre_cadena: str) -> Optional[str]:
     try:
-        # Aquí se llamaría a tu sistema real
-        # from sistema_precios import SistemaPrecios
-        # sistema = SistemaPrecios(url, usuario, password)
-        # ruta_archivo = sistema.obtener_precios(cadena)
+        await query.edit_message_text(
+            f"PROCESANDO SOLICITUD\n\n"
+            f"Cadena: {nombre_cadena}\n\n"
+            f"Consultando categorías...\n"
+            f"Obteniendo datos de precios...\n"
+            f"Generando archivo Excel..."
+        )
         
-        # Por ahora, usamos la simulación
-        ruta_archivo = sistema.obtener_precios(cadena)
+        consultas = ConsultasDB()
+        if consultas.connection_string is None:
+            logger.error("No se pudo obtener el connection string")
+            return None
         
-        if not ruta_archivo or not os.path.exists(ruta_archivo):
-            raise Exception("No se pudo generar el archivo")
+        if not consultas.conectar():
+            logger.error("No se pudo conectar a la base de datos")
+            return None
         
-        # Obtener tamaño del archivo
-        tamano = os.path.getsize(ruta_archivo)
-        tamano_mb = tamano / (1024 * 1024)
+        cdn_id = obtener_cdn_id(nombre_cadena)
         
-        # Enviar el archivo
+        categorias_df = consultas.obtener_categorias_por_cadena(cdn_id)
+        if categorias_df is None or len(categorias_df) == 0:
+            logger.error(f"No se encontraron categorías para {nombre_cadena}")
+            consultas.desconectar()
+            return None
+        
+        await query.edit_message_text(
+            f"PROCESANDO SOLICITUD\n\n"
+            f"Cadena: {nombre_cadena}\n\n"
+            f"Categorías consultadas ({len(categorias_df)} encontradas)\n"
+            f"Obteniendo datos de precios...\n"
+            f"Generando archivo Excel..."
+        )
+        
+        df_precios = consultas.ejecutar_stored_procedure_precios(cdn_id, categorias_df)
+        if df_precios is None or df_precios.empty:
+            logger.error(f"No se obtuvieron datos de precios para {nombre_cadena}")
+            consultas.desconectar()
+            return None
+        
+        await query.edit_message_text(
+            f"PROCESANDO SOLICITUD\n\n"
+            f"Cadena: {nombre_cadena}\n\n"
+            f"Categorías consultadas ({len(categorias_df)} encontradas)\n"
+            f"Datos de precios obtenidos ({len(df_precios)} registros)\n"
+            f"Generando archivo Excel..."
+        )
+        
+        archivo_generado = consultas.generar_archivo_excel(df_precios, categorias_df, nombre_cadena)
+        consultas.desconectar()
+        
+        if archivo_generado:
+            await query.edit_message_text(
+                f"PROCESANDO SOLICITUD\n\n"
+                f"Cadena: {nombre_cadena}\n\n"
+                f"Categorías consultadas ({len(categorias_df)})\n"
+                f"Datos de precios obtenidos ({len(df_precios)} registros)\n"
+                f"Archivo Excel generado\n\n"
+                f"Enviando archivo..."
+            )
+            return archivo_generado
+            
+    except Exception as e:
+        logger.error(f"Error al generar reporte: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+    
+    return None
+
+async def enviar_archivo_excel(query, ruta_archivo: str, nombre_cadena: str):
+    try:
+        tamano_archivo = os.path.getsize(ruta_archivo) / 1024
+        nombre_archivo = os.path.basename(ruta_archivo)
+        
+        import pandas as pd
+        try:
+            df_full = pd.read_excel(ruta_archivo, sheet_name='Precios')
+            total_filas = len(df_full)
+            total_columnas = len(df_full.columns)
+        except Exception as e:
+            logger.warning(f"Error al leer archivo para info: {e}")
+            total_columnas = "N/A"
+            total_filas = "N/A"
+        
         with open(ruta_archivo, 'rb') as archivo:
-            await context.bot.send_document(
-                chat_id=query.message.chat_id,
+            await query.message.reply_document(
                 document=archivo,
-                filename=os.path.basename(ruta_archivo),
+                filename=nombre_archivo,
                 caption=(
-                    f"✅ *Archivo generado exitosamente*\n\n"
-                    f"🏪 Cadena: {cadena}\n"
-                    f"📍 Alcance: Todas las sucursales\n"
-                    f"📅 Fecha: {datetime.now().strftime('%d/%m/%Y %H:%M')}\n"
-                    f"📦 Tamaño: {tamano_mb:.2f} MB\n\n"
-                    f"_Usa /start para generar otro archivo_"
+                    f"REPORTE GENERADO EXITOSAMENTE\n\n"
+                    f"Cadena: {nombre_cadena}\n"
+                    f"Archivo: {nombre_archivo}\n"
+                    f"Tamaño: {tamano_archivo:.2f} KB\n"
+                    f"Registros: {total_filas} productos\n"
+                    f"Columnas: {total_columnas}\n\n"
+                    f"Características:\n"
+                    f"- Filtros automáticos activados\n"
+                    f"- Encabezados formateados\n"
+                    f"- Columnas auto-ajustadas\n\n"
+                    f"¿Deseas generar otro reporte?"
                 ),
-                parse_mode='Markdown'
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("Nuevo reporte", callback_data="start_nuevo"),
+                    InlineKeyboardButton("Finalizar", callback_data="finalizar_todo")
+                ]])
             )
         
-        # Actualizar mensaje original
-        await query.edit_message_text(
-            f"✅ *Proceso completado exitosamente*\n\n"
-            f"El archivo ha sido enviado. Revisa arriba 👆\n\n"
-            f"Usa /start si necesitas generar otro archivo.",
-            parse_mode='Markdown'
-        )
-        
-        # Limpiar archivo temporal
-        try:
-            os.remove(ruta_archivo)
-            logger.info(f"Archivo temporal eliminado: {ruta_archivo}")
-        except Exception as e:
-            logger.warning(f"No se pudo eliminar archivo temporal: {e}")
-        
-        logger.info(f"Archivo enviado exitosamente a {query.from_user.first_name} - Cadena: {cadena}")
-        
-        # Limpiar datos del usuario
-        context.user_data.clear()
+        logger.info(f"Archivo enviado exitosamente: {nombre_archivo}")
         
     except Exception as e:
-        logger.error(f"Error al generar/enviar archivo: {e}")
-        
-        keyboard = [
-            [InlineKeyboardButton("🔄 Reintentar", callback_data="CONFIRMAR_GENERAR")],
-            [InlineKeyboardButton("🔄 Cambiar Cadena", callback_data="VOLVER_CADENAS")],
-            [InlineKeyboardButton("❌ Cancelar", callback_data="CANCELAR")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await query.edit_message_text(
-            "❌ *Error al generar el archivo*\n\n"
-            "Ocurrió un problema durante la generación del archivo. "
-            "Esto puede deberse a:\n"
-            "• Problemas de conexión con el sistema\n"
-            "• Datos no disponibles temporalmente\n"
-            "• Error en el servidor\n\n"
-            "¿Deseas intentar nuevamente?",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
+        logger.error(f"Error al enviar archivo: {e}")
+        await query.message.reply_text(
+            "ERROR\n\n"
+            "No se pudo enviar el archivo. Por favor, intenta nuevamente.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("Volver al menú", callback_data="volver_menu")
+            ]])
         )
 
+async def start_nuevo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer("Iniciando nuevo reporte...")
+    
+    try:
+        await query.message.delete()
+    except Exception as e:
+        logger.warning(f"No se pudo eliminar mensaje: {e}")
+    
+    user = update.effective_user
+    
+    mensaje_inicial = (
+        f"Hola {user.first_name}\n\n"
+        f"Bienvenido al Sistema Automático de Consulta de Precios\n\n"
+        f"Puedo generar reportes de precios en formato Excel para cualquiera "
+        f"de nuestras {len(CADENAS_LISTA)} cadenas.\n\n"
+        f"Por favor, selecciona la cadena que deseas consultar:"
+    )
+    
+    mensaje = await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text=mensaje_inicial
+    )
+    
+    update.callback_query = None
+    update.message = mensaje
+    
+    return await mostrar_menu_cadenas(update, context)
+
+async def finalizar_todo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer("Sesión finalizada")
+    
+    await query.edit_message_text(
+        "OPERACIÓN FINALIZADA\n\n"
+        "Puedes iniciar nuevamente con /start en cualquier momento."
+    )
+    
+    return ConversationHandler.END
+
+async def volver_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer("Volviendo al menú...")
+    
+    return await mostrar_menu_cadenas(update, context)
+
+async def cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer("Operación cancelada")
+    
+    await query.edit_message_text(
+        "OPERACIÓN CANCELADA\n\n"
+        "Puedes iniciar nuevamente con /start en cualquier momento."
+    )
+    
+    return ConversationHandler.END
 
 async def ayuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Comando de ayuda"""
-    await update.message.reply_text(
-        "🤖 *Sistema de Consulta de Precios*\n\n"
-        "*Comandos disponibles:*\n"
-        "/start - Iniciar solicitud de precios\n"
-        "/ayuda - Mostrar esta ayuda\n\n"
-        "*¿Cómo usar el bot?*\n"
-        "1. Usa /start para comenzar\n"
-        "2. Selecciona la cadena de tu interés\n"
-        "3. Confirma y recibe tu archivo Excel\n\n"
-        "*Características:*\n"
-        "• Los archivos incluyen *todas las sucursales*\n"
-        "• Formato Excel (.xlsx) listo para usar\n"
-        "• Generación automática e instantánea\n"
-        "• Datos actualizados del sistema\n\n"
-        "💡 *Tip:* Puedes cancelar en cualquier momento\n\n"
-        "_Si tienes problemas, contacta al administrador_",
-        parse_mode='Markdown'
+    mensaje_ayuda = (
+        "AYUDA - SISTEMA DE CONSULTA DE PRECIOS\n\n"
+        "Comandos disponibles:\n"
+        "/start - Iniciar el proceso de consulta\n"
+        "/ayuda o /help - Mostrar esta ayuda\n\n"
+        "¿Cómo funciona?\n"
+        "1. Selecciona una cadena del menú\n"
+        "2. El sistema consulta automáticamente:\n"
+        "   - Categorías disponibles\n"
+        "   - Precios actuales de todos los productos\n"
+        "   - Información detallada por sucursal\n"
+        "3. Recibes un archivo Excel listo para usar\n\n"
+        f"Cadenas disponibles: {len(CADENAS_LISTA)}\n\n"
+        "Tiempo de respuesta: 30-120 segundos\n\n"
+        "Formato del archivo:\n"
+        "- Archivo Excel (.xlsx)\n"
+        "- Organizado por categorías\n"
+        "- Incluye precios y disponibilidad\n\n"
+        "¿Necesitas ayuda adicional?\n"
+        "Contacta al administrador del sistema."
     )
-
-
-async def estadisticas(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Comando para ver estadísticas (solo admin)"""
-    user_id = update.effective_user.id
-    
-    # IDs de administradores (agregar los tuyos)
-    ADMINS = []  # Ejemplo: [123456789, 987654321]
-    
-    if ADMINS and user_id not in ADMINS:
-        await update.message.reply_text("❌ No tienes permisos para ver estadísticas.")
-        return
-    
-    # Aquí podrías mostrar estadísticas reales
-    await update.message.reply_text(
-        "📊 *Estadísticas del Bot*\n\n"
-        "Esta función estará disponible próximamente.\n\n"
-        "Incluirá:\n"
-        "• Total de solicitudes procesadas\n"
-        "• Cadenas más consultadas\n"
-        "• Archivos generados hoy\n"
-        "• Usuarios activos\n"
-        "• Horarios de mayor uso\n\n"
-        "_Para activar esta función, implementa el sistema de registro_",
-        parse_mode='Markdown'
-    )
-
-
-async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Maneja errores globales del bot"""
-    logger.error(f"Error en actualización: {context.error}")
-    
-    # Si hay un usuario activo, informarle del error
-    if update and update.effective_user:
-        try:
-            await context.bot.send_message(
-                chat_id=update.effective_user.id,
-                text=(
-                    "❌ *Error interno del bot*\n\n"
-                    "Ha ocurrido un error inesperado. "
-                    "Por favor, intenta nuevamente usando /start\n\n"
-                    "Si el problema persiste, contacta al administrador."
-                ),
-                parse_mode='Markdown'
-            )
-        except:
-            pass
-
+    await update.message.reply_text(mensaje_ayuda)
 
 def main():
-    """Función principal"""
-    logger.info("=" * 50)
-    logger.info("Iniciando Bot de Consulta de Precios...")
-    logger.info("=" * 50)
+    logger.info("Iniciando bot...")
     
-    try:
-        # Crear aplicación
-        application = Application.builder().token(TOKEN).build()
+    token = os.getenv('TELEGRAM_BOT_TOKEN')
+    
+    if not token:
+        logger.error("TELEGRAM_BOT_TOKEN no encontrado en variables de entorno")
+        logger.error("Verifica que el archivo .env exista y contenga el token")
+        logger.error(f"Token esperado: 8541513790:AAFYFNeWnDWx8sWtMKZy_iw_F9Pj1zIZSXI")
+        logger.error(f"Directorio actual: {os.getcwd()}")
+        logger.error(f"Archivos en directorio: {os.listdir('.')}")
         
-        # Agregar handlers
-        application.add_handler(CommandHandler("start", start))
-        application.add_handler(CommandHandler("ayuda", ayuda))
-        application.add_handler(CommandHandler("help", ayuda))
-        application.add_handler(CommandHandler("stats", estadisticas))
-        application.add_handler(CallbackQueryHandler(button_callback))
+        # Intentar leer directamente el archivo .env
+        try:
+            with open('.env', 'r') as f:
+                contenido = f.read()
+                logger.info(f"Contenido de .env:\n{contenido}")
+        except Exception as e:
+            logger.error(f"No se pudo leer .env: {e}")
         
-        # Agregar manejador de errores
-        application.add_error_handler(error_handler)
-        
-        # Iniciar bot
-        logger.info("✅ Bot iniciado correctamente")
-        logger.info(f"📋 Cadenas disponibles: {len(CADENAS)}")
-        logger.info("🔄 Modo: GENERAL (todas las sucursales)")
-        logger.info("⌨️  Presiona Ctrl+C para detener el bot")
-        logger.info("=" * 50)
-        
-        # Ejecutar bot
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
-        
-    except KeyboardInterrupt:
-        logger.info("\n⚠️  Bot detenido por el usuario")
-    except Exception as e:
-        logger.error(f"❌ Error crítico al iniciar el bot: {e}")
-    finally:
-        logger.info("👋 Bot finalizado")
+        return
+    
+    logger.info("Token encontrado en .env")
+    
+    logger.info("Verificando credenciales encriptadas...")
+    
+    cred_manager = obtener_credenciales_manager()
+    if not cred_manager.cargar_credenciales():
+        logger.error("No se pudieron cargar las credenciales encriptadas")
+        logger.error("Verifica que existan los archivos secret.key y credenciales.enc")
+        return
+    
+    if not cred_manager.validar_credenciales():
+        logger.error("Las credenciales no son válidas")
+        return
+    
+    logger.info("Credenciales validadas correctamente")
+    logger.info("Verificando conexión a la base de datos...")
+    
+    consultas_test = ConsultasDB()
+    if not consultas_test.conectar():
+        logger.error("No se pudo conectar a la base de datos")
+        return
+    
+    consultas_test.desconectar()
+    logger.info("Conexión a BD verificada correctamente")
+    
+    application = Application.builder().token(token).build()
+    
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('start', start)],
+        states={
+            SELECCIONANDO_CADENA: [
+                CallbackQueryHandler(seleccionar_cadena, pattern='^cadena_'),
+                CallbackQueryHandler(volver_menu, pattern='^volver_menu$'),
+                CallbackQueryHandler(cancelar, pattern='^cancelar$'),
+                CallbackQueryHandler(start_nuevo, pattern='^start_nuevo$'),
+                CallbackQueryHandler(finalizar_todo, pattern='^finalizar_todo$'),
+            ],
+        },
+        fallbacks=[
+            CommandHandler('start', start),
+            CallbackQueryHandler(start_nuevo, pattern='^start_nuevo$'),
+            CallbackQueryHandler(finalizar_todo, pattern='^finalizar_todo$'),
+        ],
+    )
+    
+    application.add_handler(conv_handler)
+    application.add_handler(CommandHandler('ayuda', ayuda))
+    application.add_handler(CommandHandler('help', ayuda))
+    
+    logger.info("="*70)
+    logger.info("BOT DE CONSULTA DE PRECIOS INICIADO")
+    logger.info("="*70)
+    logger.info(f"Cadenas configuradas: {len(CADENAS_LISTA)}")
+    logger.info(f"Token de Telegram: {'*' * 20}{token[-8:]}")
+    logger.info(f"Sistema de credenciales: Encriptado")
+    logger.info(f"Conexión BD: Activa")
+    logger.info("="*70)
+    
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

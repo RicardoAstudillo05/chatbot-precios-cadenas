@@ -1,22 +1,15 @@
-# ============================================
 # ARCHIVOS SENSIBLES - NO SUBIR
-# ============================================
 .env.local
 .env.production
 
-# ============================================
 # ARCHIVOS TEMPORALES Y DESCARGAS
-# ============================================
 descargas/
 *.xls
 *.xlsx
 *.csv
 *.log
 
-# ============================================
 # PYTHON
-# ============================================
-# Bytecode
 __pycache__/
 *.py[cod]
 *$py.class
@@ -28,10 +21,7 @@ env/
 ENV/
 .venv
 
-# ============================================
 # SISTEMA OPERATIVO
-# ============================================
-# Windows
 Thumbs.db
 desktop.ini
 *.lnk
@@ -44,10 +34,7 @@ desktop.ini
 # Linux
 *~
 
-# ============================================
 # IDEs
-# ============================================
-# Visual Studio Code
 .vscode/
 *.code-workspace
 
@@ -58,9 +45,7 @@ desktop.ini
 # Jupyter Notebook
 .ipynb_checkpoints
 
-# ============================================
 # OTROS
-# ============================================
 *.bak
 *.tmp
 *.swp
