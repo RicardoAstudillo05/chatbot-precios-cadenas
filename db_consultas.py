@@ -7,7 +7,7 @@ import warnings
 from datetime import datetime
 import os
 
-from cadenas_config import obtener_cdn_id, validar_cadena
+from cadenas_config import obtener_cdn_id, validar_cadena, obtener_categorias_excluidas
 from credenciales_manager import obtener_connection_string
 
 warnings.filterwarnings('ignore')
@@ -44,6 +44,9 @@ class ConsultasDB:
     
     def obtener_categorias_por_cadena(self, cdn_id: int) -> Optional[pd.DataFrame]:
         try:
+            # Obtener categorías excluidas para esta cadena
+            categorias_excluidas = obtener_categorias_excluidas(cdn_id)
+            
             query = """
             SELECT IDCategoria, cat_abreviatura, cat_descripcion
             FROM Categoria
@@ -59,7 +62,13 @@ class ConsultasDB:
                 logger.warning(f"No se encontraron categorías para cdn_id: {cdn_id}")
                 return None
             
-            logger.info(f"Se encontraron {len(df)} categorías")
+            # Filtrar categorías excluidas
+            if categorias_excluidas:
+                df_filtrado = df[~df['IDCategoria'].isin(categorias_excluidas)]
+                logger.info(f"Filtradas {len(df) - len(df_filtrado)} categorías excluidas")
+                df = df_filtrado
+            
+            logger.info(f"Se encontraron {len(df)} categorías (después de filtrar excluidas)")
             return df
             
         except Exception as e:
@@ -188,6 +197,7 @@ class ConsultasDB:
         df: pd.DataFrame,
         categorias_df: pd.DataFrame,
         nombre_cadena: str,
+        cdn_id: int = None,
         ruta_salida: str = None
     ) -> Optional[str]:
         try:
@@ -249,6 +259,14 @@ class ConsultasDB:
             df_limpio[plu_id_col] = df_limpio[plu_id_col].astype(str).str.strip().str.upper()
             df_limpio[categoria_id_col] = df_limpio[categoria_id_col].astype(str).str.strip().str.upper()
             df_limpio[pvp_col] = pd.to_numeric(df_limpio[pvp_col], errors='coerce').fillna(0.0)
+            
+            # Filtrar datos de categorías excluidas
+            if cdn_id:
+                categorias_excluidas = obtener_categorias_excluidas(cdn_id)
+                if categorias_excluidas:
+                    registros_originales = len(df_limpio)
+                    df_limpio = df_limpio[~df_limpio[categoria_id_col].isin(categorias_excluidas)]
+                    logger.info(f"Filtrados {registros_originales - len(df_limpio)} registros de categorías excluidas")
             
             # Log de muestra de datos
             logger.info(f"Muestra de datos limpios (primeras 3 filas):")
@@ -483,7 +501,7 @@ class ConsultasDB:
             
             # Generar archivo Excel
             logger.info("PASO 4: Generando archivo Excel...")
-            ruta_archivo = self.generar_archivo_excel(df_precios, categorias_df, nombre_cadena)
+            ruta_archivo = self.generar_archivo_excel(df_precios, categorias_df, nombre_cadena, cdn_id)
             if ruta_archivo is None:
                 logger.error("PASO 4: Error al generar archivo Excel")
                 self.desconectar()

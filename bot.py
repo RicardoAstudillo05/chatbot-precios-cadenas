@@ -83,11 +83,19 @@ async def mostrar_menu_cadenas(update: Update, context: ContextTypes.DEFAULT_TYP
         "El proceso puede tomar entre 30 segundos y 2 minutos"
     )
     
-    if update.callback_query:
-        await update.callback_query.edit_message_text(
-            mensaje,
-            reply_markup=reply_markup
-        )
+    # Verificar si el callback_query tiene un mensaje válido para editar
+    if update.callback_query and update.callback_query.message:
+        try:
+            await update.callback_query.edit_message_text(
+                mensaje,
+                reply_markup=reply_markup
+            )
+        except Exception:
+            # Si no se puede editar, enviar como mensaje nuevo
+            await update.callback_query.message.reply_text(
+                mensaje,
+                reply_markup=reply_markup
+            )
     else:
         await update.message.reply_text(
             mensaje,
@@ -198,7 +206,7 @@ async def generar_reporte(query, nombre_cadena: str) -> Optional[str]:
             f"Generando archivo Excel..."
         )
         
-        archivo_generado = consultas.generar_archivo_excel(df_precios, categorias_df, nombre_cadena)
+        archivo_generado = consultas.generar_archivo_excel(df_precios, categorias_df, nombre_cadena, cdn_id)
         consultas.desconectar()
         
         if archivo_generado:
@@ -273,6 +281,8 @@ async def start_nuevo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     query = update.callback_query
     await query.answer("Iniciando nuevo reporte...")
     
+    chat_id = query.message.chat_id
+    
     try:
         await query.message.delete()
     except Exception as e:
@@ -285,18 +295,63 @@ async def start_nuevo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         f"Bienvenido al Sistema Automático de Consulta de Precios\n\n"
         f"Puedo generar reportes de precios en formato Excel para cualquiera "
         f"de nuestras {len(CADENAS_LISTA)} cadenas.\n\n"
+        f"El proceso incluye:\n"
+        f"- Consulta automática de categorías\n"
+        f"- Obtención de precios actualizados\n"
+        f"- Generación de archivo Excel\n\n"
         f"Por favor, selecciona la cadena que deseas consultar:"
     )
     
-    mensaje = await context.bot.send_message(
-        chat_id=query.message.chat_id,
+    # Enviar mensaje de bienvenida
+    await context.bot.send_message(
+        chat_id=chat_id,
         text=mensaje_inicial
     )
     
-    update.callback_query = None
-    update.message = mensaje
+    # Enviar menú de selección de cadenas
+    return await enviar_menu_cadenas(context, chat_id)
+
+async def enviar_menu_cadenas(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> int:
+    """Envía el menú de selección de cadenas (sin depender de update)"""
+    keyboard = []
+    for i in range(0, len(CADENAS_LISTA), 2):
+        fila = []
+        cadena1 = CADENAS_LISTA[i]
+        nombre_boton1 = cadena1 if len(cadena1) <= 25 else cadena1[:22] + "..."
+        fila.append(
+            InlineKeyboardButton(
+                f"{i+1}. {nombre_boton1}",
+                callback_data=f"cadena_{cadena1}"
+            )
+        )
+        
+        if i + 1 < len(CADENAS_LISTA):
+            cadena2 = CADENAS_LISTA[i + 1]
+            nombre_boton2 = cadena2 if len(cadena2) <= 25 else cadena2[:22] + "..."
+            fila.append(
+                InlineKeyboardButton(
+                    f"{i+2}. {nombre_boton2}",
+                    callback_data=f"cadena_{cadena2}"
+                )
+            )
+        keyboard.append(fila)
     
-    return await mostrar_menu_cadenas(update, context)
+    keyboard.append([InlineKeyboardButton("Cancelar", callback_data="cancelar")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    mensaje = (
+        "SELECCIÓN DE CADENA\n\n"
+        "Elige la cadena para la cual deseas generar el reporte de precios:\n\n"
+        "El proceso puede tomar entre 30 segundos y 2 minutos"
+    )
+    
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=mensaje,
+        reply_markup=reply_markup
+    )
+    
+    return SELECCIONANDO_CADENA
 
 async def finalizar_todo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
